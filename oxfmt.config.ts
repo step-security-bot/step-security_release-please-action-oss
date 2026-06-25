@@ -5,7 +5,7 @@ export default defineConfig({
   bracketSameLine: false,
   bracketSpacing: true,
   endOfLine: 'lf',
-  ignorePatterns: ['dist/**/*', 'CHANGELOG.md'],
+  ignorePatterns: ['dist/**/*', 'CHANGELOG.md', '.github/workflows/**/*'],
   jsxSingleQuote: false,
   printWidth: 120,
   quoteProps: 'as-needed',
