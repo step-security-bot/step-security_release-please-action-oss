@@ -20433,13 +20433,7 @@ function redactConfig(config, redactKeys) {
 var AxiosError$1 = class AxiosError$1 extends Error {
 	static from(error, code, config, request, response, customProps) {
 		const axiosError = new AxiosError$1(error.message, code || error.code, config, request, response);
-		Object.defineProperty(axiosError, "cause", {
-			__proto__: null,
-			value: error,
-			writable: true,
-			enumerable: false,
-			configurable: true
-		});
+		axiosError.cause = error;
 		axiosError.name = error.name;
 		if (error.status != null && axiosError.status == null) axiosError.status = error.status;
 		customProps && Object.assign(axiosError, customProps);
@@ -29212,11 +29206,7 @@ function toFormData$1(obj, formData, options) {
 		if (utils_default.isDate(value)) return value.toISOString();
 		if (utils_default.isBoolean(value)) return value.toString();
 		if (!useBlob && utils_default.isBlob(value)) throw new AxiosError$1("Blob is not supported. Use a Buffer instead.");
-		if (utils_default.isArrayBuffer(value) || utils_default.isTypedArray(value)) {
-			if (useBlob && typeof _Blob === "function") return new _Blob([value]);
-			if (typeof Buffer !== "undefined") return Buffer.from(value);
-			throw new AxiosError$1("Blob is not supported. Use a Buffer instead.", AxiosError$1.ERR_NOT_SUPPORT);
-		}
+		if (utils_default.isArrayBuffer(value) || utils_default.isTypedArray(value)) return useBlob && typeof Blob === "function" ? new Blob([value]) : Buffer.from(value);
 		return value;
 	}
 	function throwIfMaxDepthExceeded(depth) {
@@ -29324,7 +29314,9 @@ prototype.append = function append(name, value) {
 	this._pairs.push([name, value]);
 };
 prototype.toString = function toString(encoder) {
-	const _encode = encoder ? (value) => encoder.call(this, value, encode$1) : encode$1;
+	const _encode = encoder ? function(value) {
+		return encoder.call(this, value, encode$1);
+	} : encode$1;
 	return this._pairs.map(function each(pair) {
 		return _encode(pair[0]) + "=" + _encode(pair[1]);
 	}, "").join("&");
@@ -29353,7 +29345,6 @@ function encode(val) {
 */
 function buildURL(url, params, options) {
 	if (!params) return url;
-	url = url || "";
 	const _options = utils_default.isFunction(options) ? { serialize: options } : options;
 	const _encode = utils_default.getSafeProp(_options, "encode") || encode;
 	const serializeFn = utils_default.getSafeProp(_options, "serialize");
@@ -31575,7 +31566,7 @@ var require_follow_redirects = /* @__PURE__ */ __commonJSMin(((exports, module) 
 //#region node_modules/axios/lib/env/data.js
 var import_dist = /* @__PURE__ */ __toESM(require_dist$6(), 1);
 var import_follow_redirects = /* @__PURE__ */ __toESM(require_follow_redirects(), 1);
-const VERSION$2 = "1.18.1";
+const VERSION$2 = "1.18.0";
 //#endregion
 //#region node_modules/axios/lib/helpers/parseProtocol.js
 function parseProtocol(url) {
@@ -31607,10 +31598,10 @@ function fromDataURI(uri, asBlob, options) {
 		const params = match[2];
 		const encoding = match[3] ? "base64" : "utf8";
 		const body = match[4];
-		let mime = "";
+		let mime;
 		if (type) mime = params ? type + params : type;
 		else if (params) mime = "text/plain" + params;
-		const buffer = encoding === "base64" ? Buffer.from(body, "base64") : Buffer.from(decodeURIComponent(body), encoding);
+		const buffer = Buffer.from(decodeURIComponent(body), encoding);
 		if (asBlob) {
 			if (!_Blob) throw new AxiosError$1("Blob is not supported", AxiosError$1.ERR_NOT_SUPPORT);
 			return new _Blob([buffer], { type: mime });
@@ -32205,25 +32196,6 @@ const kAxiosCurrentReq = Symbol("axios.http.currentReq");
 const kAxiosInstalledTunnel = Symbol("axios.http.installedTunnel");
 const tunnelingAgentCache = /* @__PURE__ */ new Map();
 const tunnelingAgentCacheUser = /* @__PURE__ */ new WeakMap();
-const NODE_NATIVE_ENV_PROXY_SUPPORT = {
-	22: 21,
-	24: 5
-};
-function isNodeNativeEnvProxySupported(nodeVersion = process.versions && process.versions.node) {
-	if (!nodeVersion) return false;
-	const [major, minor] = nodeVersion.split(".").map((part) => Number(part));
-	if (!Number.isInteger(major) || !Number.isInteger(minor)) return false;
-	if (major > 24) return true;
-	return NODE_NATIVE_ENV_PROXY_SUPPORT[major] != null && minor >= NODE_NATIVE_ENV_PROXY_SUPPORT[major];
-}
-function isNodeEnvProxyEnabled(agent, nodeVersion = process.versions && process.versions.node) {
-	if (!isNodeNativeEnvProxySupported(nodeVersion)) return false;
-	const agentOptions = agent && agent.options;
-	return Boolean(agentOptions && utils_default.hasOwnProp(agentOptions, "proxyEnv") && agentOptions.proxyEnv != null);
-}
-function getProxyEnvAgent(options, configHttpAgent, configHttpsAgent) {
-	return isHttps.test(options.protocol) ? configHttpsAgent || https.globalAgent : configHttpAgent || http.globalAgent;
-}
 function getTunnelingAgent(agentOptions, userHttpsAgent) {
 	const key = agentOptions.protocol + "//" + agentOptions.hostname + ":" + (agentOptions.port || "") + "#" + (agentOptions.auth || "");
 	const cache = userHttpsAgent ? tunnelingAgentCacheUser.get(userHttpsAgent) || tunnelingAgentCacheUser.set(userHttpsAgent, /* @__PURE__ */ new Map()).get(userHttpsAgent) : tunnelingAgentCache;
@@ -32300,10 +32272,9 @@ function isSameOriginRedirect(redirectOptions, requestDetails) {
 *
 * @returns {http.ClientRequestArgs}
 */
-function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, configHttpAgent) {
+function setProxy(options, configProxy, location, isRedirect, configHttpsAgent) {
 	let proxy = configProxy;
-	const proxyEnvAgent = getProxyEnvAgent(options, configHttpAgent, configHttpsAgent);
-	if (!proxy && proxy !== false && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
+	if (!proxy && proxy !== false) {
 		const proxyUrl = getProxyForUrl(location);
 		if (proxyUrl) {
 			if (!shouldBypassProxy(location)) proxy = new URL(proxyUrl);
@@ -32367,7 +32338,7 @@ function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, 
 		}
 	}
 	options.beforeRedirects.proxy = function beforeRedirect(redirectOptions) {
-		setProxy(redirectOptions, configProxy, redirectOptions.href, true, configHttpsAgent, configHttpAgent);
+		setProxy(redirectOptions, configProxy, redirectOptions.href, true, configHttpsAgent);
 	};
 }
 const isHttpAdapterSupported = typeof process !== "undefined" && utils_default.kindOf(process) === "process";
@@ -32437,12 +32408,10 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 		let httpVersion = own("httpVersion");
 		if (httpVersion === void 0) httpVersion = 1;
 		let http2Options = own("http2Options");
-		const httpAgent = own("httpAgent");
-		const httpsAgent = own("httpsAgent");
-		const configProxy = own("proxy");
 		const responseType = own("responseType");
 		const responseEncoding = own("responseEncoding");
-		const socketPath = own("socketPath");
+		const httpAgent = own("httpAgent");
+		const httpsAgent = own("httpsAgent");
 		const method = own("method").toUpperCase();
 		const maxRedirects = own("maxRedirects");
 		const maxBodyLength = own("maxBodyLength");
@@ -32513,8 +32482,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 			} else onFinished();
 		});
 		const fullPath = buildFullPath(own("baseURL"), own("url"), own("allowAbsoluteUrls"), config);
-		const urlBase = socketPath ? "http://localhost" : platform_default.hasBrowserEnv ? platform_default.origin : void 0;
-		const parsed = new URL(fullPath, urlBase);
+		const parsed = new URL(fullPath, platform_default.hasBrowserEnv ? platform_default.origin : void 0);
 		const protocol = parsed.protocol || supportedProtocols[0];
 		if (protocol === "data:") {
 			if (maxContentLength > -1) {
@@ -32546,7 +32514,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 		}
 		if (supportedProtocols.indexOf(protocol) === -1) return reject(new AxiosError$1("Unsupported protocol " + protocol, AxiosError$1.ERR_BAD_REQUEST, config));
 		const headers = AxiosHeaders$1.from(config.headers).normalize();
-		headers.set("User-Agent", "axios/1.18.1", false);
+		headers.set("User-Agent", "axios/1.18.0", false);
 		const { onUploadProgress, onDownloadProgress } = config;
 		const maxRate = config.maxRate;
 		let maxUploadRate = void 0;
@@ -32556,7 +32524,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 			data = formDataToStream(data, (formHeaders) => {
 				headers.set(formHeaders);
 			}, {
-				tag: `axios-1.18.1-boundary`,
+				tag: `axios-1.18.0-boundary`,
 				boundary: userBoundary && userBoundary[1] || void 0
 			});
 		} else if (utils_default.isFormData(data) && utils_default.isFunction(data.getHeaders) && data.getHeaders !== Object.prototype.getHeaders) {
@@ -32603,10 +32571,11 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 		try {
 			path = buildURL(parsed.pathname + parsed.search, own("params"), own("paramsSerializer")).replace(/^\?/, "");
 		} catch (err) {
-			return reject(AxiosError$1.from(err, AxiosError$1.ERR_BAD_REQUEST, config, null, null, {
-				url: own("url"),
-				exists: true
-			}));
+			const customErr = new Error(err.message);
+			customErr.config = config;
+			customErr.url = own("url");
+			customErr.exists = true;
+			return reject(customErr);
 		}
 		headers.set("Accept-Encoding", utils_default.hasOwnProp(transitional, "advertiseZstdAcceptEncoding") && transitional.advertiseZstdAcceptEncoding === true ? ACCEPT_ENCODING_WITH_ZSTD : ACCEPT_ENCODING, false);
 		const options = Object.assign(Object.create(null), {
@@ -32625,6 +32594,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 			http2Options
 		});
 		!utils_default.isUndefined(lookup) && (options.lookup = lookup);
+		const socketPath = own("socketPath");
 		if (socketPath) {
 			if (typeof socketPath !== "string") return reject(new AxiosError$1("socketPath must be a string", AxiosError$1.ERR_BAD_OPTION_VALUE, config));
 			const allowedSocketPaths = own("allowedSocketPaths");
@@ -32637,7 +32607,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 		} else {
 			options.hostname = parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname;
 			options.port = parsed.port;
-			setProxy(options, configProxy, protocol + "//" + parsed.hostname + (parsed.port ? ":" + parsed.port : "") + options.path, false, httpsAgent, httpAgent);
+			setProxy(options, own("proxy"), protocol + "//" + parsed.hostname + (parsed.port ? ":" + parsed.port : "") + options.path, false, httpsAgent);
 		}
 		let transport;
 		let isNativeTransport = false;
@@ -32804,7 +32774,7 @@ var http_default = isHttpAdapterSupported && function httpAdapter(config) {
 		});
 		const boundSockets = /* @__PURE__ */ new Set();
 		req.on("socket", function handleRequestSocket(socket) {
-			if (typeof socket.setKeepAlive === "function") socket.setKeepAlive(true, 1e3 * 60);
+			socket.setKeepAlive(true, 1e3 * 60);
 			if (!socket[kAxiosSocketListener]) {
 				socket.on("error", function handleSocketError(err) {
 					const current = socket[kAxiosCurrentReq];
@@ -32891,11 +32861,7 @@ var cookies_default = platform_default.hasStandardBrowserEnv ? {
 		for (let i = 0; i < cookies.length; i++) {
 			const cookie = cookies[i].replace(/^\s+/, "");
 			const eq = cookie.indexOf("=");
-			if (eq !== -1 && cookie.slice(0, eq) === name) try {
-				return decodeURIComponent(cookie.slice(eq + 1));
-			} catch (e) {
-				return cookie.slice(eq + 1);
-			}
+			if (eq !== -1 && cookie.slice(0, eq) === name) return decodeURIComponent(cookie.slice(eq + 1));
 		}
 		return null;
 	},
@@ -32922,7 +32888,6 @@ const headersToObject = (thing) => thing instanceof AxiosHeaders$1 ? { ...thing 
 * @returns {Object} New object resulting from merging config2 to config1
 */
 function mergeConfig$1(config1, config2) {
-	config1 = config1 || {};
 	config2 = config2 || {};
 	const config = Object.create(null);
 	Object.defineProperty(config, "hasOwnProperty", {
@@ -33014,7 +32979,7 @@ function setFormDataHeaders(headers, formHeaders, policy) {
 		headers.set(formHeaders);
 		return;
 	}
-	Object.entries(formHeaders || {}).forEach(([key, val]) => {
+	Object.entries(formHeaders).forEach(([key, val]) => {
 		if (FORM_DATA_CONTENT_HEADERS.includes(key.toLowerCase())) headers.set(key, val);
 	});
 }
@@ -33044,11 +33009,7 @@ function resolveConfig(config) {
 	if (auth) {
 		const username = utils_default.getSafeProp(auth, "username") || "";
 		const password = utils_default.getSafeProp(auth, "password") || "";
-		try {
-			headers.set("Authorization", "Basic " + btoa(username + ":" + (password ? encodeUTF8$1(password) : "")));
-		} catch (e) {
-			throw AxiosError$1.from(e, AxiosError$1.ERR_BAD_OPTION_VALUE, config);
-		}
+		headers.set("Authorization", "Basic " + btoa(username + ":" + (password ? encodeUTF8$1(password) : "")));
 	}
 	if (utils_default.isFormData(data)) {
 		if (platform_default.hasStandardBrowserEnv || platform_default.hasStandardBrowserWebWorkerEnv || utils_default.isReactNative(data)) headers.setContentType(void 0);
@@ -33159,7 +33120,6 @@ var xhr_default = isXHRAdapterSupported && function(config) {
 		const protocol = parseProtocol(_config.url);
 		if (protocol && !platform_default.protocols.includes(protocol)) {
 			reject(new AxiosError$1("Unsupported protocol " + protocol + ":", AxiosError$1.ERR_BAD_REQUEST, config));
-			done();
 			return;
 		}
 		request.send(requestData || null);
@@ -33193,7 +33153,7 @@ const composeSignals = (signals, timeout) => {
 		});
 		signals = null;
 	};
-	signals.forEach((signal) => signal.addEventListener("abort", onabort, { once: true }));
+	signals.forEach((signal) => signal.addEventListener("abort", onabort));
 	const { signal } = controller;
 	signal.unsubscribe = () => utils_default.asap(unsubscribe);
 	return signal;
@@ -33506,13 +33466,7 @@ const factory = (env) => {
 				const canceledError = composedSignal.reason;
 				canceledError.config = config;
 				request && (canceledError.request = request);
-				if (err !== canceledError) Object.defineProperty(canceledError, "cause", {
-					__proto__: null,
-					value: err,
-					writable: true,
-					enumerable: false,
-					configurable: true
-				});
+				err !== canceledError && (canceledError.cause = err);
 				throw canceledError;
 			}
 			if (pendingBodyError) {
@@ -33523,17 +33477,7 @@ const factory = (env) => {
 				request && !err.request && (err.request = request);
 				throw err;
 			}
-			if (err && err.name === "TypeError" && /Load failed|fetch/i.test(err.message)) {
-				const networkError = new AxiosError$1("Network Error", AxiosError$1.ERR_NETWORK, config, request, err && err.response);
-				Object.defineProperty(networkError, "cause", {
-					__proto__: null,
-					value: err.cause || err,
-					writable: true,
-					enumerable: false,
-					configurable: true
-				});
-				throw networkError;
-			}
+			if (err && err.name === "TypeError" && /Load failed|fetch/i.test(err.message)) throw Object.assign(new AxiosError$1("Network Error", AxiosError$1.ERR_NETWORK, config, request, err && err.response), { cause: err.cause || err });
 			throw AxiosError$1.from(err, err && err.code, config, request, err && err.response);
 		}
 	};
@@ -33630,7 +33574,7 @@ function getAdapter$1(adapters, config) {
 	}
 	if (!adapter) {
 		const reasons = Object.entries(rejectedReasons).map(([id, state]) => `adapter ${id} ` + (state === false ? "is not supported by the environment" : "is not available in the build"));
-		throw new AxiosError$1(`There is no suitable adapter to dispatch the request ` + (length ? reasons.length > 1 ? "since :\n" + reasons.map(renderReason).join("\n") : " " + renderReason(reasons[0]) : "as no adapter specified"), AxiosError$1.ERR_NOT_SUPPORT);
+		throw new AxiosError$1(`There is no suitable adapter to dispatch the request ` + (length ? reasons.length > 1 ? "since :\n" + reasons.map(renderReason).join("\n") : " " + renderReason(reasons[0]) : "as no adapter specified"), "ERR_NOT_SUPPORT");
 	}
 	return adapter;
 }
@@ -33758,7 +33702,7 @@ validators$1.spelling = function spelling(correctSpelling) {
 * @returns {object}
 */
 function assertOptions(options, schema, allowUnknown) {
-	if (typeof options !== "object" || options === null) throw new AxiosError$1("options must be an object", AxiosError$1.ERR_BAD_OPTION_VALUE);
+	if (typeof options !== "object") throw new AxiosError$1("options must be an object", AxiosError$1.ERR_BAD_OPTION_VALUE);
 	const keys = Object.keys(options);
 	let i = keys.length;
 	while (i-- > 0) {
@@ -40351,9 +40295,6 @@ var require_branch_name = /* @__PURE__ */ __commonJSMin(((exports) => {
 		toString() {
 			return "";
 		}
-		isComponent() {
-			return false;
-		}
 	};
 	exports.BranchName = BranchName;
 	/**
@@ -40426,9 +40367,6 @@ var require_branch_name = /* @__PURE__ */ __commonJSMin(((exports) => {
 		toString() {
 			return `${RELEASE_PLEASE}/branches/${this.targetBranch}/components/${this.component}`;
 		}
-		isComponent() {
-			return true;
-		}
 	};
 	const DEFAULT_PATTERN = `^${RELEASE_PLEASE}--branches--(?<branch>.+)$`;
 	var DefaultBranchName = class extends BranchName {
@@ -40459,9 +40397,6 @@ var require_branch_name = /* @__PURE__ */ __commonJSMin(((exports) => {
 		}
 		toString() {
 			return `${RELEASE_PLEASE}--branches--${this.targetBranch}--components--${this.component}`;
-		}
-		isComponent() {
-			return true;
 		}
 	};
 	const GROUP_PATTERN = `^${RELEASE_PLEASE}--branches--(?<branch>.+)--groups--(?<group>.+)$`;
@@ -73944,13 +73879,6 @@ var require_base = /* @__PURE__ */ __commonJSMin(((exports) => {
 				this.logger.error(`Bad branch name: ${mergedPullRequest.headBranchName}`);
 				return;
 			}
-			const branchComponent = await this.getBranchComponent();
-			if (branchName.isComponent()) {
-				if (this.normalizeComponent(branchName.component) !== this.normalizeComponent(branchComponent)) {
-					this.logger.info(`PR branch component: ${branchName.component} does not match configured branch component: ${branchComponent}`);
-					return;
-				}
-			}
 			const pullRequestBody = await this.parsePullRequestBody(mergedPullRequest.body);
 			if (!pullRequestBody) {
 				this.logger.error("Could not parse pull request body as a release PR");
@@ -81698,7 +81626,6 @@ var require_librarian_yaml = /* @__PURE__ */ __commonJSMin(((exports) => {
 		* @returns {string} The updated content
 		*/
 		updateContent(content, _logger = logger_1.logger) {
-			var _a;
 			const doc = yaml.parseDocument(content);
 			if (!doc || doc.errors.length > 0) throw new Error(`Invalid yaml, cannot be parsed: ${doc.errors.map((e) => e.message).join(", ")}`);
 			const libraries = doc.get("libraries");
@@ -81708,33 +81635,34 @@ var require_librarian_yaml = /* @__PURE__ */ __commonJSMin(((exports) => {
 				if (!yaml.isMap(library)) continue;
 				const libraryJSON = library.toJSON();
 				let newVersion = void 0;
-				let isPreview = false;
 				if (this.versionsMap) {
 					const artifactID = this.findArtifactID(libraryJSON);
 					if (this.versionsMap.has(artifactID)) newVersion = this.versionsMap.get(artifactID);
 				} else {
-					const isGoPreviewMatch = this.packagePath && this.packagePath === `preview/internal/${libraryJSON.name}`;
-					const isPythonPreviewMatch = this.packagePath && this.packagePath === `preview-packages/${libraryJSON.name}`;
-					if (isGoPreviewMatch || isPythonPreviewMatch) {
-						isPreview = true;
-						newVersion = this.version;
-					} else {
-						const isGoMatch = this.packagePath && libraryJSON.name === this.packagePath || this.component && libraryJSON.name === this.component;
-						const isPythonNodeMatch = this.packagePath && this.deriveOutputDirectory(libraryJSON) === this.packagePath;
-						if (isGoMatch || isPythonNodeMatch) newVersion = this.version;
-					}
+					const isGoMatch = this.packagePath && libraryJSON.name === this.packagePath || this.component && libraryJSON.name === this.component;
+					const isPythonNodeMatch = this.packagePath && this.deriveOutputDirectory(libraryJSON) === this.packagePath;
+					if (isGoMatch || isPythonNodeMatch) newVersion = this.version;
 				}
 				if (newVersion) {
 					const newVersionStr = newVersion.toString();
-					if (isPreview) {
-						const previewNode = this.getOrCreateSubsection(library, "preview", doc);
-						if (this.updateValue(previewNode, "version", newVersionStr)) modified = true;
-					} else {
-						if (this.updateValue(library, "version", newVersionStr)) modified = true;
-						if (this.versionsMap) {
-							if (!!!((_a = newVersion.preRelease) === null || _a === void 0 ? void 0 : _a.includes("SNAPSHOT"))) {
-								const javaNode = this.getOrCreateSubsection(library, "java", doc);
-								if (this.updateValue(javaNode, "released_version", newVersionStr)) modified = true;
+					if (library.get("version") !== newVersionStr) {
+						library.set("version", newVersionStr);
+						modified = true;
+					}
+					if (this.versionsMap) {
+						if (!(newVersion.preRelease === "SNAPSHOT")) {
+							let java = library.get("java");
+							if (!yaml.isMap(java)) {
+								const javaNode = doc.createNode({});
+								library.set("java", javaNode);
+								java = javaNode;
+								modified = true;
+							}
+							if (yaml.isMap(java)) {
+								if (java.get("released_version") !== newVersionStr) {
+									java.set("released_version", newVersionStr);
+									modified = true;
+								}
 							}
 						}
 					}
@@ -81752,21 +81680,6 @@ var require_librarian_yaml = /* @__PURE__ */ __commonJSMin(((exports) => {
 			if (artifact) return artifact;
 			if (library.java && library.java.artifact_id) return library.java.artifact_id;
 			return `google-cloud-${library.name}`;
-		}
-		getOrCreateSubsection(parent, key, doc) {
-			let section = parent.get(key);
-			if (!yaml.isMap(section)) {
-				section = doc.createNode({});
-				parent.set(key, section);
-			}
-			return section;
-		}
-		updateValue(node, key, value) {
-			if (node.get(key) !== value) {
-				node.set(key, value);
-				return true;
-			}
-			return false;
 		}
 	};
 	exports.LibrarianYamlUpdater = LibrarianYamlUpdater;
@@ -81787,18 +81700,6 @@ var require_go_librarian = /* @__PURE__ */ __commonJSMin(((exports) => {
 			options.changelogPath = (_a = options.changelogPath) !== null && _a !== void 0 ? _a : "CHANGES.md";
 			super(options);
 			this.versionFile = (_b = options.versionFile) !== null && _b !== void 0 ? _b : "internal/version.go";
-		}
-		async getComponent() {
-			const component = await super.getComponent();
-			if (component) {
-				const match = component.match(/^(.*)\/v[2-9]\d*$/);
-				if (match) return match[1];
-			}
-			return component;
-		}
-		async getBranchComponent() {
-			const component = await super.getBranchComponent();
-			return component ? component.replace(/\//g, "-") : void 0;
 		}
 		async buildUpdates(options) {
 			const updates = [];
@@ -81829,7 +81730,7 @@ var require_go_librarian = /* @__PURE__ */ __commonJSMin(((exports) => {
 		}
 		initialReleaseVersion() {
 			if (this.initialVersion) return version_1.Version.parse(this.initialVersion);
-			return version_1.Version.parse("0.1.0");
+			return version_1.Version.parse("1.0.0");
 		}
 	};
 	exports.GoLibrarian = GoLibrarian;
@@ -87129,28 +87030,26 @@ var require_manifest$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
 					continue;
 				}
 				const component = tagName.component || exports.DEFAULT_COMPONENT_NAME;
-				const paths = pathsByComponent[component] || [];
-				if (paths.length === 0) {
+				const path = pathsByComponent[component];
+				if (!path) {
 					this.logger.warn(`Found release tag with component '${component}', but not configured in manifest`);
 					continue;
 				}
-				for (const path of paths) {
-					const expectedVersion = this.releasedVersions[path];
-					if (!expectedVersion) {
-						this.logger.warn(`Unable to find expected version for path '${path}' in manifest`);
-						continue;
-					}
-					if (expectedVersion.toString() === tagName.version.toString()) {
-						this.logger.debug(`Found release for path ${path}, ${release.tagName}`);
-						releaseShasByPath[path] = release.sha;
-						releasesByPath[path] = {
-							name: release.name,
-							tag: tagName,
-							sha: release.sha,
-							notes: release.notes || ""
-						};
-						releasesFound += 1;
-					}
+				const expectedVersion = this.releasedVersions[path];
+				if (!expectedVersion) {
+					this.logger.warn(`Unable to find expected version for path '${path}' in manifest`);
+					continue;
+				}
+				if (expectedVersion.toString() === tagName.version.toString()) {
+					this.logger.debug(`Found release for path ${path}, ${release.tagName}`);
+					releaseShasByPath[path] = release.sha;
+					releasesByPath[path] = {
+						name: release.name,
+						tag: tagName,
+						sha: release.sha,
+						notes: release.notes || ""
+					};
+					releasesFound += 1;
 				}
 				if (releasesFound >= expectedReleases) break;
 			}
@@ -87561,8 +87460,8 @@ var require_manifest$1 = /* @__PURE__ */ __commonJSMin(((exports) => {
 				const strategiesByPath = await this.getStrategiesByPath();
 				for (const path in this.repositoryConfig) {
 					const component = await strategiesByPath[path].getComponent() || "";
-					if (!this._pathsByComponent[component]) this._pathsByComponent[component] = [];
-					this._pathsByComponent[component].push(path);
+					if (this._pathsByComponent[component]) this.logger.warn(`Multiple paths for ${component}: ${this._pathsByComponent[component]}, ${path}`);
+					this._pathsByComponent[component] = path;
 				}
 			}
 			return this._pathsByComponent;
@@ -92110,7 +92009,7 @@ var require_dist = /* @__PURE__ */ __commonJSMin(((exports) => {
 var require_package = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 	module.exports = {
 		"name": "release-please",
-		"version": "17.10.0",
+		"version": "17.9.0",
 		"description": "generate release PRs based on the conventionalcommits.org spec",
 		"main": "./build/src/index.js",
 		"bin": "./build/src/bin/release-please.js",
@@ -92148,7 +92047,7 @@ var require_package = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			"@types/js-yaml": "^4.0.0",
 			"@types/jsonpath": "^0.2.0",
 			"@types/mocha": "^10.0.0",
-			"@types/node": "^22.0.0",
+			"@types/node": "^18.0.0",
 			"@types/npmlog": "^7.0.0",
 			"@types/semver": "^7.0.0",
 			"@types/sinon": "^17.0.0",
@@ -92200,7 +92099,7 @@ var require_package = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			"yaml": "^2.2.2",
 			"yargs": "^17.0.0"
 		},
-		"engines": { "node": ">=22.0.0" },
+		"engines": { "node": ">=20.0.0" },
 		"overrides": {
 			"tmp": "0.2.6",
 			"serialize-javascript": "^7.0.5"
@@ -95992,7 +95891,7 @@ var require_src = /* @__PURE__ */ __commonJSMin(((exports) => {
 	});
 	exports.configSchema = require_config();
 	exports.manifestSchema = require_manifest();
-	exports.VERSION = "17.10.0";
+	exports.VERSION = "17.9.0";
 }));
 //#endregion
 //#region src/main.ts
