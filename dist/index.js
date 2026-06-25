@@ -46486,10 +46486,10 @@ var require_writer_opts = /* @__PURE__ */ __commonJSMin(((exports, module) => {
 			prefix: "{{this.prefix}}"
 		});
 		const [template, header, commit, footer] = await Promise.all([
-			readFile(resolve$1(__dirname, "./templates/template.hbs"), "utf-8"),
-			readFile(resolve$1(__dirname, "./templates/header.hbs"), "utf-8"),
-			readFile(resolve$1(__dirname, "./templates/commit.hbs"), "utf-8"),
-			readFile(resolve$1(__dirname, "./templates/footer.hbs"), "utf-8")
+			readFile(resolve$1(__dirname, "template1.hbs"), "utf-8"),
+			readFile(resolve$1(__dirname, "header1.hbs"), "utf-8"),
+			readFile(resolve$1(__dirname, "commit1.hbs"), "utf-8"),
+			readFile(resolve$1(__dirname, "footer1.hbs"), "utf-8")
 		]);
 		const writerOpts = getWriterOpts(config);
 		writerOpts.mainTemplate = template;
@@ -84432,9 +84432,9 @@ var require_ruby_yoshi = /* @__PURE__ */ __commonJSMin(((exports) => {
 			super({
 				...options,
 				changelogSections: CHANGELOG_SECTIONS,
-				commitPartial: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "../../../templates/commit.hbs"), "utf8"),
-				headerPartial: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "../../../templates/header.hbs"), "utf8"),
-				mainTemplate: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "../../../templates/template.hbs"), "utf8"),
+				commitPartial: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "commit1.hbs"), "utf8"),
+				headerPartial: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "header1.hbs"), "utf8"),
+				mainTemplate: (0, fs_1.readFileSync)((0, path_1$2.resolve)(__dirname, "template1.hbs"), "utf8"),
 				tagSeparator: "/"
 			});
 			this.versionFile = (_a = options.versionFile) !== null && _a !== void 0 ? _a : "";
